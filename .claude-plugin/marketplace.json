@@ -7,11 +7,8 @@
   "plugins": [
     {
       "name": "harness",
-      "source": {
-        "source": "git",
-        "url": "https://gitea.stump.rocks/stump.wtf/claude-plugin-harness.git"
-      },
-      "description": "Configure and use harness — the agent supervisor TUI. Covers TOML config authoring, the agent-abstraction fields (prompt, model, autoaccept, max_turns, quiet), and operational patterns for supervised agent CLIs."
+      "source": ".",
+      "description": "Configure and use harness — the agent supervisor TUI. Covers TOML config authoring, the agent-abstraction fields (prompt, model, auto_accept, quiet), scheduled harnesses via cron, and operational patterns for supervised agent CLIs."
     }
   ]
 }
