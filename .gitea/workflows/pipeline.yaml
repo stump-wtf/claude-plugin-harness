@@ -69,8 +69,17 @@ jobs:
       # Authoritative validation: the same parser the daemon runs. Without it
       # `make test` silently degrades to the tomllib + schema-rules fallback,
       # which is useful but can drift from upstream — so say which mode ran.
+      #
+      # GOPRIVATE is load-bearing, not hygiene. Without it the default
+      # GOSUMDB=sum.golang.org is consulted for a module hosted on the LAN,
+      # sum.golang.org tries to fetch gitea.stump.rocks itself to build the
+      # entry, cannot reach it, and returns 404 — so the install fails AFTER
+      # the module has already downloaded fine. GOPRIVATE skips both the proxy
+      # and the checksum database for this host.
       - name: Install the harness binary
         continue-on-error: true
+        env:
+          GOPRIVATE: gitea.stump.rocks/*
         run: go install gitea.stump.rocks/stump.wtf/harness/cmd/harness@main
 
       - name: Report validation mode
