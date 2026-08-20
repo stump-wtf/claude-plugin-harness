@@ -8,7 +8,7 @@
     {
       "name": "harness",
       "source": ".",
-      "description": "Configure and use harness — the agent supervisor TUI. Covers TOML config authoring, the agent-abstraction fields (prompt, model, auto_accept, quiet), scheduled harnesses via cron, and operational patterns for supervised agent CLIs."
+      "description": "Configure and use harness \u2014 the agent supervisor TUI. Covers the required `harness` adapter enum, agent one-shots, cron scheduling, MCP facade scoping, and one-file-per-harness drop-ins via harness_d."
     }
   ]
 }

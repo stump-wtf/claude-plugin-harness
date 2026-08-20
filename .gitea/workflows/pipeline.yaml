@@ -1,0 +1,95 @@
+---
+# The Plugin Pipeline
+#
+# One run, one dependency graph:
+#
+#   secret scan → checks (make lint + make test) → ai review (PRs only)
+#
+# The interesting stage is `checks`. This repo ships documentation a model
+# copies verbatim, so "test" means every ```toml block in a SKILL.md is config
+# the real harness parser accepts. The whole reason this workflow exists is
+# that harness-config shipped for months with `cmd = "crush"` examples after
+# upstream replaced `cmd` with the required `harness` enum — every example was
+# a hard parse error and nothing noticed.
+#
+# Runner facts this works within, inherited from stump.wtf/ci's go-service.yaml:
+#   * actions/setup-python does NOT work here — the runner image has no
+#     /opt/hostedtoolcache. The system python3 is used directly, and the step
+#     below installs it only if the image somehow lacks it.
+#   * The harness binary is installed from @main, NOT @latest. `harness_d` is
+#     unreleased — v0.3.0 does not know the key, silently ignores it, and loads
+#     zero drop-ins — so validating against the released tag would be
+#     validating against a parser that predates half this skill.
+#   * If that install fails the gate still runs, in tomllib fallback mode, and
+#     says so.
+#
+# @joestump-agent 08/20/2026 - Initial pipeline, added with the harness_d
+# skill refresh.
+name: pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ gitea.workflow }}-${{ gitea.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---- 1. secret scan ------------------------------------------------------
+  # First, so a leaked credential does not wait behind anything else.
+  secrets:
+    uses: https://gitea.stump.rocks/stump.wtf/ci/.gitea/workflows/gitleaks.yaml@main
+    secrets: inherit
+
+  # ---- 2. lint + test ------------------------------------------------------
+  checks:
+    needs: [secrets]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure python3
+        run: |
+          if ! command -v python3 >/dev/null 2>&1; then
+            apt-get update -qq && apt-get install -y -qq python3
+          fi
+          python3 --version
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      # Authoritative validation: the same parser the daemon runs. Without it
+      # `make test` silently degrades to the tomllib + schema-rules fallback,
+      # which is useful but can drift from upstream — so say which mode ran.
+      - name: Install the harness binary
+        continue-on-error: true
+        run: go install gitea.stump.rocks/stump.wtf/harness/cmd/harness@main
+
+      - name: Report validation mode
+        run: |
+          if command -v harness >/dev/null 2>&1; then
+            echo "validating against the real harness parser: $(harness --version 2>&1 | head -1)"
+          else
+            echo "::warning::harness binary unavailable — validating via the tomllib fallback"
+          fi
+
+      - name: make lint
+        run: make lint
+
+      - name: make test
+        run: make test
+
+  # ---- 3. ai review (PRs only, behind a green gate) ------------------------
+  review:
+    needs: [checks]
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: https://gitea.stump.rocks/stump.wtf/ci/.gitea/workflows/aibot.yaml@main
+    secrets: inherit

@@ -24,9 +24,10 @@ https://stump-wtf.pages.stump.rocks/harness/usage/configuration
    *where* a new harness goes — see [Where a new harness goes](#where-a-new-harness-goes).
    Getting this wrong is not a style question: it puts the harness in a file
    nobody is reading.
-2. **Validate what you wrote** with `harness doctor --config <path>`. The parser
+2. **Validate what you wrote** with `harness --config <path> doctor`. The parser
    rejects far more than it used to, with a located error. Never hand back a
-   config you have not run through it.
+   config you have not run through it. Note the flag goes **before** the verb —
+   `doctor --config` is a newer spelling that older builds reject.
 
 ## Where a new harness goes
 
@@ -34,9 +35,16 @@ https://stump-wtf.pages.stump.rocks/harness/usage/configuration
 harness gets its own file** — that is the entire point of the directory, and
 appending to the main `harness.toml` instead defeats it.
 
+> ⚠️ **`harness_d` needs a build newer than v0.3.0.** It is unreleased at time
+> of writing. On v0.3.0 the key is **silently ignored** — the config still
+> reports `ok`, and every drop-in harness is simply absent. The only symptom is
+> indirect: a main-file profile naming one fails with `references unknown
+> harness "…"`. Confirm with `harness --version` before recommending drop-ins;
+> if the operator is on v0.3.0, write to the main file instead and say why.
+
 ```bash
 # 1. Find the config the daemon is actually using.
-harness doctor | grep -A1 '^config'          # or: --config <path>
+harness doctor | grep -A1 '^config'          # or: harness --config <path> doctor
 
 # 2. Is a drop-in directory configured?
 grep -n 'harness_d' ~/.config/harness/harness.toml
@@ -291,7 +299,7 @@ otel_endpoint = "https://cairn.stump.wtf"    # OTLP/HTTP trace export (optional)
 ## Validate before you hand it back
 
 ```bash
-harness doctor --config ~/.config/harness/harness.toml
+harness --config ~/.config/harness/harness.toml doctor
 harness reload      # picks up drop-ins, which are not watched
 ```
 
