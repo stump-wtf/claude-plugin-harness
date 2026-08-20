@@ -1,7 +1,7 @@
 {
   "name": "harness",
-  "version": "0.1.0",
-  "description": "Configure and use harness — the agent supervisor TUI. Covers TOML config authoring, the new agent-abstraction fields (prompt, model, auto_accept, max_turns, quiet), and operational patterns for supervised agent CLIs.",
+  "version": "0.2.0",
+  "description": "Configure and use harness \u2014 the agent supervisor TUI. Covers the required `harness` adapter enum, agent one-shots (prompt, model, auto_accept, max_turns, quiet), cron scheduling, MCP facade scoping, and the harness_d drop-in directory.",
   "author": {
     "name": "Joe Stump",
     "url": "https://github.com/joestump"
@@ -9,5 +9,11 @@
   "homepage": "https://gitea.stump.rocks/stump.wtf/harness",
   "repository": "https://gitea.stump.rocks/stump.wtf/claude-plugin-harness",
   "license": "MIT",
-  "keywords": ["harness", "agent-supervisor", "tui", "charmbracelet", "config"]
+  "keywords": [
+    "harness",
+    "agent-supervisor",
+    "tui",
+    "charmbracelet",
+    "config"
+  ]
 }
