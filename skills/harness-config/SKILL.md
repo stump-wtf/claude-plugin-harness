@@ -1,3 +1,9 @@
+---
+name: harness-config
+description: Author, edit, and review harness.toml configuration files for the harness agent supervisor — adding or updating harness definitions, wiring up agent CLIs (Crush, Claude Code, Codex, Aider) as harnesses, and questions about harness config fields or syntax.
+user-invocable: true
+---
+
 # Harness Config
 
 Skill for authoring and editing `harness.toml` configuration files for the [harness](https://gitea.stump.rocks/stump.wtf/harness) agent supervisor.
