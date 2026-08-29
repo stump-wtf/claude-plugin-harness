@@ -1,0 +1,3 @@
+
+# Agent worktrees — never visible to git, builds, or linters.
+.claude/worktrees/
