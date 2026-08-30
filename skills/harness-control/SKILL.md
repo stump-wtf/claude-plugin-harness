@@ -36,7 +36,7 @@ harness logs <name> --lines 100   # log tail without attaching
 harness doctor                    # config + daemon + harness health checks
 ```
 
-`--json` is a **global** flag and goes before the verb. `list` returns an array of objects with `name`, `state`, `enabled`, `restart_count`, `last_exit_code`, `flapping`, `pid`, `adapter`, `workdir`, `description`.
+`--json` is a **global** flag and goes before the verb. `list` returns an array of objects with `name`, `state`, `enabled`, `restart_count`, `last_exit_code`, `flapping`, `pid`, `adapter`, `backend`, `workdir`, `description`.
 
 Parse `--json`; never scrape the table. The table wraps long descriptions across lines and will not survive `grep`.
 
