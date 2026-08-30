@@ -56,7 +56,7 @@ harness reload            # re-read harness definitions + harness.d drop-ins
 ```bash
 harness run ARG...                        # throwaway harness, random name, then attach
 harness run --detach ARG...               # skip the attach, leave it running
-harness run --kind claude-code --model opus-5 --workdir ~/src/foo "do the thing"
+harness run --kind claude-code --workdir ~/src/foo "do the thing"
 ```
 
 `--kind` takes `crush`, `claude` / `claude-code`, `codex`, or `generic`.
@@ -65,22 +65,53 @@ harness run --kind claude-code --model opus-5 --workdir ~/src/foo "do the thing"
 
 ### Escalation is fire-and-forget
 
-There is **no result channel**. A spawned run cannot return anything to its parent: the parent gets a name, not an answer.
+There is **no result channel**. A spawned run cannot return anything to its
+parent: the parent gets a name, not an answer.
 
 So the workable pattern is *hand off*, not *call*:
 
-> A cheap model triages, decides an item is beyond it, spawns a run on a stronger model scoped to that one item, records in its own summary that it escalated and why, and moves on. The escalated run reports through its own channel (its Signal summary, a PR it opens) — separately, later.
+> A cheap model triages, decides an item is beyond it, spawns a run scoped to
+> that one item, records in its own summary that it escalated and why, and moves
+> on. The escalated run reports through its own channel (its Signal summary, a
+> PR it opens) — separately, later.
 
-Do **not** write an escalation that waits for, polls for, or depends on the child's answer. Give the child everything it needs in its prompt, because that prompt is the entire handoff.
+Do **not** write an escalation that waits for, polls for, or depends on the
+child's answer. Give the child everything it needs in its prompt, because that
+prompt is the entire handoff.
 
 ```bash
-# from inside a sweep that has hit something it should not attempt itself
-harness run --detach --kind crush --model <stronger-model> \
-  "Investigate <specific thing>, in <repo>. Context: <what was already established>.
-   Open a PR if a fix is warranted. Report via the usual Signal summary."
+harness run --detach --kind crush \
+  "Investigate <specific thing>, in <repo>. Context: <what was already
+   established>. Open a PR if a fix is warranted."
 ```
 
-Scope the child prompt tightly. An escalation whose prompt is "look into it" spends a full context rediscovering what the parent already knew.
+Scope the child prompt tightly. An escalation whose prompt is "look into it"
+spends a full context rediscovering what the parent already knew.
+
+### You cannot choose the model for a scratchpad run
+
+`harness run` has **no `--model` flag** — the whole surface is `--workdir`,
+`--kind`, `--name`, `--detach` (`cmd/harness/run.go`). Passing `--model`
+fails with `unknown flag: --model`, and putting it after the prompt does not
+help either: the flag is passed through to the adapter, and the run still
+exits non-zero.
+
+A scratchpad therefore runs on whatever model its adapter defaults to. **A
+"escalate to a stronger model" instruction written as a `harness run` command
+does not work**, however plausible it looks — it was shipped once and had to be
+retracted.
+
+To reach a *specific* model, the harness has to be **declared** in config with
+its own `model =` and started by name:
+
+```bash
+harness start <name>          # uses the model pinned in its harness.d entry
+```
+
+The trade-off is that a declared harness has a fixed `prompt`, so it cannot
+carry a per-incident handoff. Until `harness run` grows a `--model` flag, pick
+one: a dynamic prompt on the default model, or a fixed prompt on a chosen
+model. You cannot have both.
 
 ## Gotchas that cost real time
 
