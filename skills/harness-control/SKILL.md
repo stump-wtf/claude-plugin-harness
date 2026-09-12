@@ -98,10 +98,10 @@ harness logs <name> --include-ambiguous # also sessions another harness could ha
 By default `logs` renders **agent-trace activity** — lifecycle, tool calls, and marks, one
 line each with detail clipped to 160 chars. `--raw` gives the durable log instead.
 
-**When no agent-trace session is attributable, `logs` still prints a durable log tail** (40
-lines) under the header `durable log tail:`, preceded by a notice saying why. That is current
-behavior on `main` — do not assume it was removed. A `generic` harness has no native
-transcript and always reads this way.
+**The activity view never prints the durable log** (#328) — when nothing is attributable you
+get notice lines naming `harness logs <name> --raw`, and no log. A `generic` harness differs:
+it has no native transcript, so its source is not agent-trace and the client prints its
+durable log directly. Check `harness --version` before trusting either half.
 
 `--run` cannot be combined with `--follow`; use `harness trigger <name> --wait` to follow a
 run as it happens.

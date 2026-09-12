@@ -35,14 +35,38 @@ Verify it loaded by asking Claude to add a scheduled harness and checking that i
 
 ### Crush
 
-Crush discovers skills by **path**, not by plugin install. Link or configure the `skills/`
-directory itself — never the individual skills, or reads inside it lose their prompt-free
-grant and get truncated:
+Crush reads `options.skills_paths` **plus several directories it scans with no configuration at
+all** — `~/.config/crush/skills`, `~/.config/agents/skills`, `~/.agents/skills`,
+`~/.claude/skills`, and the `.crush/skills` / `.agents/skills` equivalents inside a project. So
+there are two working routes; a clone on its own does nothing until one of them holds.
 
 ```bash
 git clone https://github.com/stump-wtf/claude-plugin-harness.git ~/src/claude-plugin-harness
-ln -s ~/src/claude-plugin-harness/skills ~/.config/crush/skills-ext/harness
 ```
+
+**Register the clone.** Crush has two config formats and both set the same `skills_paths` list:
+`crushrc` (Bash with Crush builtins) and `crush.json`. Both work, and where a directory holds
+both Crush merges them with `crushrc` winning on conflict — but **`crush.json` is deprecated
+upstream**: still supported, and frozen, with new options landing only in the Bash config. So
+prefer `crushrc`. `option skill-path` adds to the list rather than replacing it, is upstream
+Crush rather than a fork-only directive, and expands `~`, so no absolute path is needed:
+
+```
+# ~/.config/crush/crushrc
+option skill-path ~/src/claude-plugin-harness/skills
+```
+
+**Or copy it into a scanned directory**, for zero configuration:
+
+```bash
+cp -R ~/src/claude-plugin-harness/skills/* ~/.config/crush/skills/
+```
+
+**Copy — do not symlink.** Crush resolves symlinks before deciding whether a file sits inside a
+skills directory, so a symlinked skill still *loads*, while the files it wants to read resolve
+back to the clone, outside that directory. Those reads then truncate and start asking for
+permission, which looks like the skill misbehaving rather than a path problem. To keep the files
+where you cloned them, register that path instead of copying.
 
 ## What the skills do not do
 
@@ -66,8 +90,16 @@ schema rules in `scripts/validate-examples.py`. **Install from `main`, not the r
 tag** — `harness_d` and the run controls are unreleased:
 
 ```bash
-go install gitea.stump.rocks/stump.wtf/harness/cmd/harness@main
+git clone https://github.com/stump-wtf/harness.git
+cd harness && go install ./cmd/harness
 ```
+
+Or `brew tap stump-wtf/tap && brew install harness` for the released build.
+
+**Not `go install <module>@main`.** Harness's `go.mod` declares its module path as the private
+forge, so installing by module path from the public mirror fails with
+`module declares its path as … but was required as …`. Building from a clone sidesteps the
+module path entirely, which is why the two commands above work and that one cannot.
 
 Blocks that are fragments rather than standalone configs carry an annotation on the line
 above the fence:
