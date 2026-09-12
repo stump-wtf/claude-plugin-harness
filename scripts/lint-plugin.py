@@ -11,6 +11,7 @@ frontmatter at all, so nothing could trigger it.
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -46,6 +47,15 @@ if plugin is not None and market is not None:
             f"(has {sorted(n for n in names if n)})"
         )
 
+# The two budgets a harness enforces silently. A description past the hard cap once
+# XML-escaped drops the skill from the prompt with no diagnostic — which is why the
+# house cap is 900 and not 1024, and why escapable characters are counted: each costs
+# six characters there and one here. The body cap is what keeps the always-loaded cost
+# bounded; overflow belongs in references/, which is read only when needed.
+DESC_CAP = 900
+BODY_CAP = 180
+ESCAPABLE = "&<>\"'"
+
 skills = sorted(ROOT.glob("skills/*/SKILL.md"))
 if not skills:
     fail("no skills/*/SKILL.md found")
@@ -61,6 +71,7 @@ for skill in skills:
         fail(f"{rel}: frontmatter is not terminated by a '---' line")
         continue
     front = text[4:end]
+    body = text[end + len("\n---\n"):]
     for key in ("name:", "description:"):
         if not any(line.startswith(key) for line in front.splitlines()):
             fail(f"{rel}: frontmatter is missing {key.rstrip(':')!r}")
@@ -72,6 +83,29 @@ for skill in skills:
                     f"{rel}: frontmatter name {declared!r} does not match "
                     f"directory {skill.parent.name!r}"
                 )
+
+    desc = re.search(r"^description:.*?(?=\n[a-zA-Z_-]+:|\Z)", front, re.S | re.M)
+    if desc is not None:
+        flat = " ".join(desc.group(0).split())[len("description: "):]
+        escaped = len(flat) + sum(flat.count(c) for c in ESCAPABLE) * 5
+        if len(flat) > DESC_CAP:
+            fail(f"{rel}: description is {len(flat)} chars, over the {DESC_CAP} house cap")
+        elif escaped > 1024:
+            fail(
+                f"{rel}: description is {len(flat)} chars but {escaped} once XML-escaped, "
+                "over the 1024 hard cap — the skill would be dropped silently"
+            )
+
+    # Invoking a skill as a slash command runs its whole body through the prompt's HTML
+    # escaper, mangling every quote, > and < in every snippet. A skill full of shell is
+    # exactly the wrong thing to make user-invocable.
+    if any(l.strip().startswith("user-invocable:") for l in front.splitlines()):
+        if "```" in body:
+            fail(f"{rel}: 'user-invocable' on a body containing fenced snippets mangles them")
+
+    n = len(body.splitlines())
+    if n > BODY_CAP:
+        fail(f"{rel}: body is {n} lines, over the {BODY_CAP} cap — move detail to references/")
 
 for msg in errors:
     print(f"FAIL {msg}")

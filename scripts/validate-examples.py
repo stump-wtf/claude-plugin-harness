@@ -191,7 +191,14 @@ def main():
 
     failures = 0
     checked = 0
-    for skill in sorted(ROOT.glob("skills/*/SKILL.md")):
+    # references/ carries the overflow from the 180-line body cap, and it carries
+    # TOML examples with it. Globbing SKILL.md alone would quietly stop validating
+    # every block the moment it moved out of the body — the exact regression this
+    # script exists to prevent.
+    targets = sorted(ROOT.glob("skills/*/SKILL.md")) + sorted(
+        ROOT.glob("skills/*/references/*.md")
+    )
+    for skill in targets:
         rel = skill.relative_to(ROOT)
         for line_no, directive, text in blocks(skill):
             label = f"{rel}:{line_no}"
