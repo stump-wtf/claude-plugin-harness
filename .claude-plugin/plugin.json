@@ -1,6 +1,6 @@
 {
   "name": "harness",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Configure and operate harness \u2014 the agent supervisor TUI. Covers the required `harness` adapter enum, agent one-shots (prompt, model, auto_accept, max_turns, quiet), cron scheduling with time zones, the run controls (catch_up, timeout, on_overlap, keep_runs), the harness_d drop-in directory, and the runtime verbs for scheduled jobs and logs.",
   "author": {
     "name": "Joe Stump",

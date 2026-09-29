@@ -20,6 +20,11 @@ With no annotation the block must parse clean.
 @joestump-agent 08/20/2026 - Written after every example in harness-config
 SKILL.md turned out to be a hard parse error: `cmd` had been replaced by the
 required `harness` enum upstream and nothing here noticed.
+#
+# @joestump-agent 09/29/2026 - The fallback also rejects a non-string
+# "timeout". The binary install in CI has been failing (module-path
+# mismatch), so CI only ever runs this fallback, and the timeout-as-seconds
+# WRONG example was passing there as "parsed clean".
 """
 
 import re
@@ -76,6 +81,8 @@ def check_schema(doc):
                 errs.append(f'harness "{name}": "{key}" requires "prompt"')
         if h.get("restart") is not None and h["restart"] not in RESTARTS:
             errs.append(f'harness "{name}": invalid restart policy {h["restart"]!r}')
+        if "timeout" in h and not isinstance(h["timeout"], str):
+            errs.append(f'harness "{name}": "timeout" must be a duration string (got {h["timeout"]!r})')
         if h.get("backend") is not None and h["backend"] not in BACKENDS:
             errs.append(f'harness "{name}": invalid backend {h["backend"]!r}')
         for key in ("restart_delay", "max_turns"):

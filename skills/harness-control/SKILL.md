@@ -6,10 +6,8 @@ description: Operate a RUNNING harness daemon from the command line — inspect 
 # Harness Control
 
 Operating a live [harness](https://stump-wtf.github.io/harness/) daemon. This is the runtime
-half; `harness-config` is the authoring half.
-
-The CLI **is** the supported programmatic surface (ADR-0002), and `--json` is a first-class
-contract on it. There is no MCP server and no HTTP API — do not go looking for one.
+half; `harness-config` is the authoring half. The CLI **is** the supported programmatic surface
+(ADR-0002), and `--json` is a first-class contract on it.
 
 ## Flag placement, or nothing works
 
@@ -98,13 +96,11 @@ harness logs <name> --include-ambiguous # also sessions another harness could ha
 By default `logs` renders **agent-trace activity** — lifecycle, tool calls, and marks, one
 line each with detail clipped to 160 chars. `--raw` gives the durable log instead.
 
-**The activity view never prints the durable log** (#328) — when nothing is attributable you
-get notice lines naming `harness logs <name> --raw`, and no log. A `generic` harness differs:
-it has no native transcript, so its source is not agent-trace and the client prints its
-durable log directly. Check `harness --version` before trusting either half.
+**The activity view never prints the durable log** (#328) — when nothing is attributable you get
+notice lines naming `harness logs <name> --raw`, and no log. A `generic` harness differs: no
+native transcript, so the client prints its durable log directly. Check `harness --version`.
 
-`--run` cannot be combined with `--follow`; use `harness trigger <name> --wait` to follow a
-run as it happens.
+`--run` cannot combine with `--follow`; use `harness trigger <name> --wait` to follow a live run.
 
 ## Spawning a run (and escalating)
 
@@ -115,8 +111,8 @@ harness run --kind claude-code --model claude-opus-5 --workdir ~/src/foo "do the
 ```
 
 Flags: `--workdir`, `--kind`, `--name`, `--model`, `--detach`. `--kind` takes `crush`,
-`claude` / `claude-code`, `codex`, or `generic`; the first positional is dispatched as a kind
-word if it matches one, otherwise the whole invocation runs via `sh -c` as `generic`.
+`claude` / `claude-code`, `codex`, or `generic`; the first positional dispatches as a kind
+word when it matches one, else the invocation runs via `sh -c` as `generic`.
 
 **It auto-detaches for non-interactive callers.** The interactive check requires a TTY on
 *both* stdout and stdin, and `--json` also skips the attach. An agent's `bash` tool has
@@ -130,10 +126,9 @@ parent gets a name, not an answer.
 
 So the workable pattern is *hand off*, not *call*:
 
-> A cheap model triages, decides an item is beyond it, spawns a run on a stronger model
-> scoped to that one item, records in its own summary that it escalated and why, and moves
-> on. The escalated run reports through its own channel (its Signal summary, a PR it opens) —
-> separately, later.
+> A cheap model triages, decides an item is beyond it, spawns a stronger-model run scoped to
+> that one item, records that it escalated and why, and moves on. The escalated run reports
+> through its own channel (its Signal summary, a PR it opens) — separately, later.
 
 Do **not** write an escalation that waits for, polls for, or depends on the child's answer.
 Give the child everything it needs in its prompt, because that prompt is the entire handoff.
@@ -145,40 +140,44 @@ harness run --detach --kind crush --model <stronger-model> \
    Open a PR if a fix is warranted. Report via the usual Signal summary."
 ```
 
-Scope the child prompt tightly. An escalation whose prompt is "look into it" spends a full
-context rediscovering what the parent already knew.
+Scope the child prompt tightly: an escalation whose prompt is "look into it" rediscovers at
+full cost what the parent already knew.
 
 ## Gotchas that cost real time
 
 **`harness stop` does NOT disarm a schedule.** For a scheduled harness, `enabled` governs the
 daemon lifecycle only — the cron still fires. A stopped-but-scheduled harness shows
 `state ○ stopped`, `enabled no`, *and* a live `next run`. To stop it firing, remove or comment
-the `schedule` key and `harness reload`. Confirm with `harness describe <name>` showing **no
-`next run` line**, not just a stopped state.
+the `schedule` key and `harness reload`; confirm `harness describe <name>` shows no **`next run`**.
 
 **A bare `schedule` runs in the daemon's LOCAL time.** The same drop-in on machines in two
 zones fires at two different absolute times — one full run per machine. Pin it with a
-`CRON_TZ=<zone>` prefix (`schedule = "CRON_TZ=UTC 0 9 * * *"`), or gate the harness to one host.
-
-**Provider/model resolution needs the secrets in the environment.** `crush models` (and any
-`--model provider/x` pin) only lists providers whose API key resolves. In a non-interactive
-shell with no secrets sourced, most providers vanish and a valid model id reads as "not
-found". A missing model is usually a missing key.
+`CRON_TZ=<zone>` prefix (`schedule = "CRON_TZ=UTC 0 9 * * *"`), or gate it to one host.
 
 **A model that answers `curl` may still fail every agent call.** Tool calling is separately
 enabled server-side: a self-hosted vLLM without `--enable-auto-tool-choice` and a matching
-`--tool-call-parser` serves plain completions fine and fails at stream-open for anything with
-`tool_choice: "auto"` — every agent request. Test with a real tool-using run, not a bare one.
+`--tool-call-parser` fails at stream-open for anything with `tool_choice: "auto"`. Test with a
+real tool-using run, not a bare one.
 
 ## What does not exist
 
-No MCP server, no HTTP/REST API, no `harness ls`, and no `enable`/`disable` verbs (the
-protocol has the ops; nothing registers CLI verbs for them).
+No MCP server, no HTTP/REST API, no `harness ls`, no `enable`/`disable` verbs. `internal/facade`
+defines two read-class tools (`list_trajectories`, `get_trajectory`) and **nothing serves them**
+— no MCP transport in the binary; the write trio appears only in doc comments, so `mcp_allow`
+parses but grants nothing (ADR-0010 is `status: proposed`). The `[server]` block is a Charmbracelet
+Wish **SSH** listener hosting the interactive TUI — for humans, not programmatic control. Use the
+Unix socket.
 
-`internal/facade` defines only two read-class tools (`list_trajectories`, `get_trajectory`)
-and **nothing serves them** — there is no MCP transport in the binary. The write trio appears
-only in doc comments, so `mcp_allow` parses but grants nothing. ADR-0010 is `status: proposed`.
+## Cross-harness runs and the merge train (v0.11.0)
 
-The `[server]` block is a Charmbracelet Wish **SSH** listener hosting the interactive TUI. It
-is for humans on other machines, not programmatic control — driving a Bubble Tea alt-screen
-over a PTY is not an API. Use the Unix socket.
+`harness runs [NAME...]` queries the run ledger across harnesses: `--since D|TIME` (default 24h),
+`--outcome O` (e.g. `failed,timed_out`), `--trigger T`, `--limit N`; `--wide` adds
+MODEL/TOKENS/COST/TODO/SERVED (served = what the gateway actually served). With the daemon down
+it reads ledger files directly and marks open records `running?`. A one-shot's `RESULT:` line
+(its exit summary) is read from `harness logs <name> --raw` (or `logs <name> --run N --raw`).
+**Scratchpads (`harness run`) die on a daemon restart or redeploy**; anything that must survive
+belongs in a `[harness.*]` with `triggers`/`schedule`.
+
+Watch the merge train from the daemon log: `journalctl --user -u harness -f | grep mergetrain` —
+event names `merge train enabled`, `mergetrain queue`, `mergetrain would merge`,
+`mergetrain would comment`, `mergetrain halted`, `mergetrain bypass detected`.
