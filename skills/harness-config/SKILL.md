@@ -174,14 +174,7 @@ Also validated at load: a schedule requires a prompt; it is mutually exclusive w
 
 ## Validate before you hand it back
 
-```bash
-harness --config ~/.config/harness/harness.toml doctor
-harness reload      # picks up drop-ins, which are not watched
-```
-
-`doctor` prints the parse error with file and line. Unknown keys are a hard error, not a
-silent drop. To see what a scheduled harness will actually do, `harness jobs` and
-`harness runs <name>` (the `harness-control` skill covers the runtime verbs).
+`harness --config <path> doctor` prints the parse error with file and line; unknown keys are a hard error, not a silent drop. See what a scheduled harness will actually do with `harness jobs` and `harness runs <name>`. Reload to pick up drop-ins, which are not watched.
 
 ## References
 

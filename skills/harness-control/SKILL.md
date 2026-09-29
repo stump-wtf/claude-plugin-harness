@@ -160,25 +160,30 @@ the `schedule` key and `harness reload`. Confirm with `harness describe <name>` 
 zones fires at two different absolute times — one full run per machine. Pin it with a
 `CRON_TZ=<zone>` prefix (`schedule = "CRON_TZ=UTC 0 9 * * *"`), or gate the harness to one host.
 
-**Provider/model resolution needs the secrets in the environment.** `crush models` (and any
-`--model provider/x` pin) only lists providers whose API key resolves. In a non-interactive
-shell with no secrets sourced, most providers vanish and a valid model id reads as "not
-found". A missing model is usually a missing key.
-
 **A model that answers `curl` may still fail every agent call.** Tool calling is separately
 enabled server-side: a self-hosted vLLM without `--enable-auto-tool-choice` and a matching
-`--tool-call-parser` serves plain completions fine and fails at stream-open for anything with
-`tool_choice: "auto"` — every agent request. Test with a real tool-using run, not a bare one.
+`--tool-call-parser` fails at stream-open for anything with `tool_choice: "auto"`. Test with a
+real tool-using run, not a bare one.
 
 ## What does not exist
 
-No MCP server, no HTTP/REST API, no `harness ls`, and no `enable`/`disable` verbs (the
-protocol has the ops; nothing registers CLI verbs for them).
+No MCP server, no HTTP/REST API, no `harness ls`, no `enable`/`disable` verbs. `internal/facade`
+defines two read-class tools (`list_trajectories`, `get_trajectory`) and **nothing serves them**
+— no MCP transport in the binary; the write trio appears only in doc comments, so `mcp_allow`
+parses but grants nothing (ADR-0010 is `status: proposed`). The `[server]` block is a
+Charmbracelet Wish **SSH** listener hosting the interactive TUI — for humans on other machines,
+not programmatic control. Use the Unix socket.
 
-`internal/facade` defines only two read-class tools (`list_trajectories`, `get_trajectory`)
-and **nothing serves them** — there is no MCP transport in the binary. The write trio appears
-only in doc comments, so `mcp_allow` parses but grants nothing. ADR-0010 is `status: proposed`.
+## Cross-harness runs and the merge train (v0.11.0)
 
-The `[server]` block is a Charmbracelet Wish **SSH** listener hosting the interactive TUI. It
-is for humans on other machines, not programmatic control — driving a Bubble Tea alt-screen
-over a PTY is not an API. Use the Unix socket.
+`harness runs [NAME...]` queries the run ledger across harnesses: `--since D|TIME` (default 24h),
+`--outcome O` (e.g. `failed,timed_out`), `--trigger T`, `--limit N`; `--wide` adds
+MODEL/TOKENS/COST/TODO/SERVED (served = what the gateway actually served). With the daemon down
+it reads ledger files directly and marks open records `running?`. A one-shot's `RESULT:` line —
+its exit summary — is read from `harness logs <name> --raw` (or `logs <name> --run N --raw`).
+**Scratchpads (`harness run`) die on a daemon restart or redeploy**; anything that must survive
+belongs in a `[harness.*]` with `triggers`/`schedule`.
+
+Watch the merge train from the daemon log: `journalctl --user -u harness -f | grep mergetrain` —
+event names `merge train enabled`, `mergetrain queue`, `mergetrain would merge`,
+`mergetrain would comment`, `mergetrain halted`, `mergetrain bypass detected`.
