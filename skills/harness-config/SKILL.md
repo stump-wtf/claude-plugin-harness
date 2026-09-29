@@ -172,6 +172,14 @@ Also validated at load: a schedule requires a prompt; it is mutually exclusive w
 `"on-failure"`; and the key is global-config only. Keep long instructions in a file
 (`prompt_file`) so prompt edits do not touch the schedule.
 
+## Merge train ([mergetrain])
+
+A **global-only** table (project files and drop-ins cannot enable it) that lands reviewed
+PRs by train (ADR-0032): `mode` is `"report"` or `"merge"`, `repos` lists `owner/name`
+entries, and `forge_token_env` names the env var holding the forge token — a `token` key
+is refused outright (ADR-0008). `base_branch`, `poll_interval` and `ci_timeout` (duration
+strings), and `batch` (int ≥ 1) tune it.
+
 ## Validate before you hand it back
 
 `harness --config <path> doctor` prints the parse error with file and line; unknown keys are a hard error, not a silent drop. See what a scheduled harness will actually do with `harness jobs` and `harness runs <name>`. Reload to pick up drop-ins, which are not watched.
