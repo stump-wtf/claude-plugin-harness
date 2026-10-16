@@ -20,8 +20,8 @@
 #     unreleased — v0.3.0 does not know the key, silently ignores it, and loads
 #     zero drop-ins — so validating against the released tag would be
 #     validating against a parser that predates half this skill.
-#   * If that install fails the gate still runs, in tomllib fallback mode, and
-#     says so.
+#   * A failed install now fails the gate: the tomllib fallback is a local
+#     convenience for machines without the binary, not a CI contract.
 #
 # @joestump-agent 08/20/2026 - Initial pipeline, added with the harness_d
 # skill refresh.
@@ -70,17 +70,15 @@ jobs:
       # `make test` silently degrades to the tomllib + schema-rules fallback,
       # which is useful but can drift from upstream — so say which mode ran.
       #
-      # GOPRIVATE is load-bearing, not hygiene. Without it the default
-      # GOSUMDB=sum.golang.org is consulted for a module hosted on the LAN,
-      # sum.golang.org tries to fetch gitea.stump.rocks itself to build the
-      # entry, cannot reach it, and returns 404 — so the install fails AFTER
-      # the module has already downloaded fine. GOPRIVATE skips both the proxy
-      # and the checksum database for this host.
+      # The install uses the module's DECLARED path — github.com/stump-wtf/harness,
+      # the public GitHub mirror — because go.mod declares
+      # `module github.com/stump-wtf/harness` and Go refuses a module required
+      # under any other name. The old gitea.stump.rocks path failed on every
+      # run for exactly that reason; continue-on-error hid it, so the gate
+      # silently validated via the fallback instead of the real parser. The
+      # public path goes through the normal proxy and sumdb, so no GOPRIVATE.
       - name: Install the harness binary
-        continue-on-error: true
-        env:
-          GOPRIVATE: gitea.stump.rocks/*
-        run: go install gitea.stump.rocks/stump.wtf/harness/cmd/harness@main
+        run: go install github.com/stump-wtf/harness/cmd/harness@main
 
       - name: Report validation mode
         run: |
