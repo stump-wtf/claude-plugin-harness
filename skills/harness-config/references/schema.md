@@ -204,7 +204,12 @@ autostart = true
 ```toml
 [daemon]
 watch_config = true                          # auto-reload on harness.toml change (default true)
-otel_endpoint = "https://cairn.stump.wtf"    # OTLP/HTTP trace export (optional)
+
+[telemetry]
+traces = true                                # OTLP traces, one per agent session (default false)
+endpoint = "http://127.0.0.1:4318"          # OTLP/HTTP base; /v1/logs and /v1/traces are appended
 ```
 
 `watch_config` watches `harness.toml` only — **not** `harness_d` drop-ins.
+`otel_endpoint` was removed from `[daemon]`; agent telemetry now lives in a
+`[telemetry]` table.
