@@ -176,7 +176,8 @@ hours_shutdown = "graceful"           # graceful (default) | immediate
 hours_shutdown_timeout = "15m"        # default "15m"; a positive duration string
 ```
 
-- **Syntax:** an optional `TZ=<zone>` prefix, then `"days HH:MM-HH:MM"` windows. A day range
+- **Syntax:** an optional zone prefix — `TZ=<zone>` or `CRON_TZ=<zone>`, the same prefixes
+  `schedule` accepts — then `"days HH:MM-HH:MM"` windows. A day range
   wraps the week (`Fri-Mon` is Fri/Sat/Sun/Mon), a day-less window applies every day, and an end
   at or before its start (other than the explicit end-of-day `24:00`) runs into the next day.
   A bad expression fails the load with a located error.
@@ -195,7 +196,10 @@ hours_shutdown_timeout = "15m"        # default "15m"; a positive duration strin
   the three is refused. On a harness with `triggers` the window gates **firings**, not the
   process: an out-of-hours event is recorded `skipped` with reason `outside_hours` (a burst
   coalesces into one record), a run in flight at the close finishes under its `timeout`, and
-  `catch_up = true` starts one run when hours next open. `harness trigger` is never gated.
+  `catch_up = true` starts one run when hours next open. `harness trigger <name>` is never
+  gated: the manual verb asks the daemon for exactly one run (`opTrigger`), and the hours gate
+  lives only in the scheduler pass and the event fan-out — nothing on that path consults the
+  window, which is what makes it the deliberate out-of-hours escape hatch.
 
 ## Worked patterns
 
