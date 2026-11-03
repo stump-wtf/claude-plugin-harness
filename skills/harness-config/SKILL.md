@@ -31,7 +31,7 @@ Reference docs: https://stump-wtf.github.io/harness/usage/configuration/
 `harness_d` is a directory of drop-in files. When it is configured, **each harness gets its
 own file** — appending to the main `harness.toml` instead defeats the point of it.
 
-> ⚠️ **`harness_d` landed after v0.3.0.** On that release the key is **silently ignored**: config
+> ⚠️ **`harness_d` landed in v0.4.0.** On an older release the key is **silently ignored**: config
 > reports `ok`, every drop-in harness is absent, and a main-file profile naming one fails with
 > `references unknown harness "…"`. Check `harness --version`; on an older build, use the main file.
 
