@@ -1,6 +1,6 @@
 ---
 name: harness-control
-description: Operate a RUNNING harness daemon from the command line — inspect state, start/stop/restart a harness, read logs and per-run job logs, list and trigger scheduled jobs, spawn a throwaway agent run, and escalate work from one agent to another. Use when a request is about running harnesses rather than configuring them ("what agents are running", "restart the sweep", "run the nightly job now", "why did my scheduled harness not fire", "what did run 3 do", "kick off an agent to do X", "escalate this to a bigger model"). For authoring harness.toml itself, use harness-config instead.
+description: Operate a RUNNING harness daemon from the command line — inspect state, start/stop/restart a harness, read logs and per-run job logs, list and trigger scheduled jobs, spawn a throwaway agent run, take an operating-hours-gated harness out of its off-hours hold with an after-hours lease, and escalate work from one agent to another. Use when a request is about running harnesses rather than configuring them ("what agents are running", "restart the sweep", "run the nightly job now", "why did my scheduled harness not fire", "what did run 3 do", "kick off an agent to do X", "why does it say off-hours", "escalate this to a bigger model"). For authoring harness.toml itself, use harness-config instead.
 ---
 
 # Harness Control
@@ -25,8 +25,7 @@ Every verb goes over a Unix socket, `$XDG_RUNTIME_DIR/harness.sock`, falling bac
 **This works from inside a supervised agent.** The daemon spawns children with the full
 environment, so a harness-managed agent inherits the same socket and UID — `0600` is not a
 barrier to itself. A `bash` call to `harness list` inside a Crush or Claude Code session works.
-
-Override with `--socket PATH` when talking to a non-default daemon.
+Override with `--socket PATH` for a non-default daemon.
 
 ## Inspecting
 
@@ -40,9 +39,8 @@ harness profiles                  # list profiles (active one flagged)
 ```
 
 `list --json` returns objects with `name`, `state`, `enabled`, `restart_count`,
-`last_exit_code`, `flapping`, `pid`, `adapter`, `backend`, `workdir`, `description`.
-
-Parse `--json`; never scrape the table — it wraps long descriptions and will not survive `grep`.
+`last_exit_code`, `flapping`, `pid`, `adapter`, `backend`, `workdir`, `description`. Parse
+`--json`; never scrape the table — it wraps long descriptions and will not survive `grep`.
 
 **Inside a project, a bare NAME resolves to `<project>/NAME`** for
 describe/logs/start/stop/restart/attach/rm; run the verb outside the project to address a
@@ -52,6 +50,7 @@ global harness. The **job verbs are never project-scoped** — scheduled harness
 
 ```bash
 harness start <name>      # start (and enable) it       (--all for every harness)
+harness start <name> --for 3h   # outside its operating_hours: run now, under an after-hours lease
 harness stop <name>       # stop (and disable) it
 harness restart <name>    # restart, clearing a failed latch
 harness reload            # re-read harness definitions + harness.d drop-ins
@@ -77,8 +76,7 @@ harness logs <name> --run 3       # what run 3 did (--raw for that run's own log
   verb is `trigger`, deliberately, so one verb never means two things.
 - `trigger` reports `started`, `queued`, or `skipped` per the harness's `on_overlap`. A
   queued trigger has no run id yet; `--wait` polls for the run it produces.
-- **`--wait` exit codes are not all 1**: `124` on timeout, `75` on skipped, otherwise the
-  run's own exit code.
+- **`--wait` exit codes are not all 1**: `124` timeout, `75` skipped, otherwise the run's own.
 - Run outcomes you will see in `runs`: `success`, `failed`, `timed_out`, `skipped`,
   `replaced`, `missed`, `cancelled`, `interrupted`. A `missed` record covering several
   windows renders `missed ×4`. `interrupted` means the daemon died under that run.
@@ -98,7 +96,7 @@ line each with detail clipped to 160 chars. `--raw` gives the durable log instea
 
 **The activity view never prints the durable log** (#328) — when nothing is attributable you get
 notice lines naming `harness logs <name> --raw`, and no log. A `generic` harness differs: no
-native transcript, so the client prints its durable log directly. Check `harness --version`.
+native transcript, so its durable log is printed directly. Check `harness --version`.
 
 `--run` cannot combine with `--follow`; use `harness trigger <name> --wait` to follow a live run.
 
@@ -107,35 +105,34 @@ native transcript, so the client prints its durable log directly. Check `harness
 ```bash
 harness run ARG...                        # throwaway harness, random name, then attach
 harness run --detach ARG...               # skip the attach, leave it running
-harness run --kind claude-code --model claude-opus-5 --workdir ~/src/foo "do the thing"
+harness run --detach claude-code -p "do the thing"   # after a kind word, args go to the tool
 ```
 
 Flags: `--workdir`, `--kind`, `--name`, `--model`, `--detach`. `--kind` takes `crush`,
-`claude` / `claude-code`, `codex`, or `generic`; the first positional dispatches as a kind
-word when it matches one, else the invocation runs via `sh -c` as `generic`.
+`claude` / `claude-code`, `codex`, `pi`, `omp`, `opencode`, or `generic`; the first positional
+dispatches as a kind word when it matches one, else the invocation runs via `sh -c` as `generic`.
 
 **It auto-detaches for non-interactive callers.** The interactive check requires a TTY on
-*both* stdout and stdin, and `--json` also skips the attach. An agent's `bash` tool has
-neither, so `harness run ...` from inside an agent backgrounds itself correctly — `--detach`
-is belt-and-braces there, not required.
+*both* stdout and stdin, and `--json` also skips the attach. An agent's `bash` tool has neither,
+so `harness run ...` from inside an agent backgrounds itself — `--detach` is belt-and-braces.
 
 ### Escalation is fire-and-forget
 
 There is **no result channel**. A spawned run cannot return anything to its parent: the
 parent gets a name, not an answer.
 
-So the workable pattern is *hand off*, not *call*:
-
-> A cheap model triages, decides an item is beyond it, spawns a stronger-model run scoped to
-> that one item, records that it escalated and why, and moves on. The escalated run reports
-> through its own channel (its Signal summary, a PR it opens) — separately, later.
+So the workable pattern is *hand off*, not *call*: a cheap model triages, decides an item is
+beyond it, spawns a stronger-model run scoped to that one item, records that it escalated and
+why, and moves on. The escalated run reports through its own channel (its Signal summary, a PR
+it opens) — separately, later.
 
 Do **not** write an escalation that waits for, polls for, or depends on the child's answer.
 Give the child everything it needs in its prompt, because that prompt is the entire handoff.
 
 ```bash
 # from inside a sweep that has hit something it should not attempt itself
-harness run --detach --kind crush --model <stronger-model> \
+# `crush <prompt>` starts the TUI and drops the prompt: `crush run` is the one-shot form
+harness run --detach crush run --model <stronger-model> \
   "Investigate <specific thing>, in <repo>. Context: <what was already established>.
    Open a PR if a fix is warranted. Report via the usual Signal summary."
 ```
@@ -154,6 +151,11 @@ the `schedule` key and `harness reload`; confirm `harness describe <name>` shows
 zones fires at two different absolute times — one full run per machine. Pin it with a
 `CRON_TZ=<zone>` prefix (`schedule = "CRON_TZ=UTC 0 9 * * *"`), or gate it to one host.
 
+**An hours-gated harness reads `off-hours`, not `stopped`.** `operating_hours` holds a resident
+harness down outside its windows without touching `enabled`; `harness start <name>` runs it under
+a one-hour after-hours lease anyway (`--for 3h` to lengthen it; `NEXT` reads `lease until <time>`,
+a graceful close reads `closing`; `harness stop` ends it early). It cannot combine with `schedule`.
+
 **A model that answers `curl` may still fail every agent call.** Tool calling is separately
 enabled server-side: a self-hosted vLLM without `--enable-auto-tool-choice` and a matching
 `--tool-call-parser` fails at stream-open for anything with `tool_choice: "auto"`. Test with a
@@ -162,11 +164,10 @@ real tool-using run, not a bare one.
 ## What does not exist
 
 No MCP server, no HTTP/REST API, no `harness ls`, no `enable`/`disable` verbs. `internal/facade`
-defines two read-class tools (`list_trajectories`, `get_trajectory`) and **nothing serves them**
-— no MCP transport in the binary; the write trio appears only in doc comments, so `mcp_allow`
-parses but grants nothing (ADR-0010 is `status: proposed`). The `[server]` block is a Charmbracelet
-Wish **SSH** listener hosting the interactive TUI — for humans, not programmatic control. Use the
-Unix socket.
+defines two read-class tools and **nothing serves them** — no MCP transport in the binary, and
+the write trio appears only in doc comments, so `mcp_allow` parses but grants nothing (ADR-0010
+is `status: proposed`). The `[server]` block is a Wish **SSH** listener hosting the TUI — for
+humans, not control. Use the Unix socket.
 
 ## Cross-harness runs and the merge train (v0.11.0)
 

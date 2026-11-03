@@ -8,7 +8,8 @@ description: >
   `harness.toml` or a drop-in under a `harness.d` directory, or reviewing an
   existing config. Covers the required `harness` enum, agent one-shots
   (prompt/prompt_file/model/auto_accept/max_turns/quiet), cron scheduling with
-  time zones, the run controls (catch_up, timeout, on_overlap, keep_runs),
+  time zones, the run controls (catch_up, timeout, on_overlap, keep_runs), operating
+  hours with the after-hours lease,
   profiles, and the `harness_d` drop-in directory — including the rule that
   decides whether a new harness goes in the main file or its own file.
 ---
@@ -22,20 +23,17 @@ Reference docs: https://stump-wtf.github.io/harness/usage/configuration/
 
 1. **Read the existing config** and check for `[server] harness_d` — it decides *where* a new
    harness goes (below). Getting it wrong puts the harness in a file nobody reads.
-2. **Validate what you wrote** with `harness --config <path> doctor`. The parser rejects far
-   more than it used to, with a located error; never hand back a config you have not run it on.
+2. **Validate what you wrote** with `harness --config <path> doctor`; never hand back a config
+   you have not run it on.
 
 ## Where a new harness goes
 
 `harness_d` is a directory of drop-in files. When it is configured, **each harness gets its
-own file** — that is the entire point of the directory, and appending to the main
-`harness.toml` instead defeats it.
+own file** — appending to the main `harness.toml` instead defeats the point of it.
 
-> ⚠️ **`harness_d` needs a build newer than v0.3.0**, which is still the latest tag. On
-> v0.3.0 the key is **silently ignored** — the config still reports `ok`, and every drop-in
-> harness is simply absent. The only symptom is indirect: a main-file profile naming one
-> fails with `references unknown harness "…"`. Confirm with `harness --version`; if the
-> operator is on a released build, write to the main file instead and say why.
+> ⚠️ **`harness_d` landed after v0.3.0.** On that release the key is **silently ignored**: config
+> reports `ok`, every drop-in harness is absent, and a main-file profile naming one fails with
+> `references unknown harness "…"`. Check `harness --version`; on an older build, use the main file.
 
 ```bash
 harness doctor | grep -A1 '^config'          # which config is the daemon using?
@@ -61,8 +59,8 @@ When writing a drop-in:
 - **Reload afterwards.** Drop-ins are **not** watched: `watch_config` watches `harness.toml`
   only, so a new file is invisible until `harness reload`.
 - A leading `~` expands to the home directory; a **relative path resolves against the
-  directory holding `harness.toml`**, not the daemon's working directory.
-- Only `*.toml` is read; files merge lexicographically; duplicate names are rejected.
+  directory holding `harness.toml`**, not the daemon's working directory. Only `*.toml` is
+  read; files merge lexicographically; duplicate names are rejected.
 
 <!-- validate: skip resolves against a real home directory, which a runner has no reason to have -->
 ```toml
@@ -85,7 +83,8 @@ restart = "on-failure"
 
 Default `$XDG_CONFIG_HOME/harness/harness.toml` (usually `~/.config/harness/harness.toml`),
 overridable with `--config`. A missing file is **not** an error. A repo may also carry a
-project-scoped `harness.toml`, which rejects the global-only keys.
+project-scoped `harness.toml`, which rejects the global-only keys (`schedule`, the run controls,
+the operating-hours keys, `mcp_allow`).
 
 ## `harness` is required, and `cmd` is gone
 
@@ -99,21 +98,21 @@ cmd = "crush"
 ```
 
 ```toml
-# RIGHT
 [harness.dev-agent]
 harness = "crush"
 ```
 
 `agent = ` was likewise renamed to `harness = `. Both removed keys are still decoded so their
 presence **fails loudly** rather than silently running something else. There is no default —
-an omitted `harness` key is an error naming the four valid values (`crush`, `claude-code`,
-`codex`, `generic`).
+an omitted `harness` key is an error naming the valid values (`crush`, `claude-code`, `codex`,
+`pi`, `omp`, `opencode`, `generic`, `command`).
 
 A harness is then **either** long-running (`args`) **or** an agent one-shot (`prompt`, or
 `prompt_file` naming a file that exists). Those are mutually exclusive, and `model`,
-`auto_accept`, `max_turns`, `quiet`, and `schedule` all require a prompt. The full key
-census, the adapter argv table, and every parser rule are in
-`references/schema.md` (resolve it against this skill's own directory).
+`auto_accept`, `max_turns`, `quiet`, and `schedule` all require a prompt. `generic` and
+`command` have **no prompt mode**: a `prompt` on either is a config error (#420), not the
+fall-through to Crush it used to be. The full key census, the adapter argv table, and every
+parser rule are in `references/schema.md` (resolve it against this skill's own directory).
 
 ## Scheduled one-shots
 
@@ -135,13 +134,12 @@ restart = "on-failure"
 ```
 
 **Cron forms.** Standard 5-field expressions, **and** descriptors — `@daily`, `@hourly`,
-`@every 6h` all parse. (Older guidance claiming descriptors are rejected is wrong; verified
-against the parser.)
+`@every 6h` all parse (older guidance claiming descriptors are rejected is wrong).
 
 **Time zones.** A bare expression runs in the daemon's **local** zone, so the same drop-in on
 two machines fires at two different absolute times. Prefix it with `CRON_TZ=<zone>` (or
-`TZ=<zone>`) to pin it: `schedule = "CRON_TZ=America/New_York 30 2 * * *"`. An unknown zone
-is a load error. Descriptors take the prefix too (`CRON_TZ=UTC @daily`).
+`TZ=<zone>`) to pin it: `schedule = "CRON_TZ=America/New_York 30 2 * * *"`. An unknown zone is a
+load error; descriptors take the prefix too (`CRON_TZ=UTC @daily`).
 
 ### The four run controls
 
@@ -167,6 +165,12 @@ schedule = "0 3 * * *"
 timeout = 2700
 ```
 
+**Operating hours.** `operating_hours = "TZ=<zone> Mon-Fri 09:00-13:00"` gates a **resident**
+harness to weekly windows instead of firing it: outside them it reads `off-hours`, and
+`harness start <name> --for 3h` runs it under an after-hours lease anyway. It is mutually
+exclusive with `schedule`, and `hours_shutdown` / `hours_shutdown_timeout` require it. Window
+syntax, the lease, and the `closing` state: `references/schema.md`.
+
 Also validated at load: a schedule requires a prompt; it is mutually exclusive with
 `enabled = true` and with profile membership; `restart` is restricted to `"no"` or
 `"on-failure"`; and the key is global-config only. Keep long instructions in a file
@@ -174,11 +178,8 @@ Also validated at load: a schedule requires a prompt; it is mutually exclusive w
 
 ## Merge train ([mergetrain])
 
-A **global-only** table (project files and drop-ins cannot enable it) that lands reviewed
-PRs by train (ADR-0032): `mode` is `"report"` or `"merge"`, `repos` lists `owner/name`
-entries, and `forge_token_env` names the env var holding the forge token — a `token` key
-is refused outright (ADR-0008). `base_branch`, `poll_interval` and `ci_timeout` (duration
-strings), and `batch` (int ≥ 1) tune it.
+A **global-only** table that lands reviewed PRs by train (ADR-0032); its keys are in
+`references/schema.md`.
 
 ## Validate before you hand it back
 
@@ -189,5 +190,5 @@ strings), and `batch` (int ≥ 1) tune it.
 Resolve against this skill's own directory.
 
 - `references/schema.md` — the full `[harness.*]` key census, the adapter argv table, every
-  parser rule, project-scoped restrictions, the facade/`mcp_allow` reality, and worked
-  patterns (drop-in job, dev agent, generic command, profiles, daemon settings).
+  parser rule, project-scoped restrictions, operating hours and the after-hours lease, the
+  `[mergetrain]` keys, the facade/`mcp_allow` reality, and worked patterns.

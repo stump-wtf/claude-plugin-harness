@@ -86,20 +86,19 @@ make test         # every ```toml example must parse
 `make test` extracts every ```toml block from every `SKILL.md` **and every
 `skills/*/references/*.md`** and validates it. When a `harness` binary is on `PATH` it uses
 the real parser — the same one the daemon runs; otherwise it falls back to `tomllib` plus the
-schema rules in `scripts/validate-examples.py`. **Install from `main`, not the released
-tag** — `harness_d` and the run controls are unreleased:
+schema rules in `scripts/validate-examples.py`. **Validate against `main`, not a released tag:**
+these files model what `main` does, so an older tag's parser rejects keys `main` accepts.
 
 ```bash
-git clone https://github.com/stump-wtf/harness.git
-cd harness && go install ./cmd/harness
+go install github.com/stump-wtf/harness/cmd/harness@main   # @latest = the newest tag
 ```
 
-Or `brew tap stump-wtf/tap && brew install harness` for the released build.
+Or `brew install stump-wtf/tap/harness` for the released build — the one-step form, because
+Homebrew ≥ 6 refuses to `brew tap` an untrusted tap.
 
-**Not `go install <module>@main`.** Harness's `go.mod` declares its module path as the private
-forge, so installing by module path from the public mirror fails with
-`module declares its path as … but was required as …`. Building from a clone sidesteps the
-module path entirely, which is why the two commands above work and that one cannot.
+**The module path is public:** `go.mod` declares `github.com/stump-wtf/harness`, so installing
+by module path from the mirror needs no clone. Cloning and `go install ./cmd/harness` is still
+how you validate against an unmerged branch.
 
 Blocks that are fragments rather than standalone configs carry an annotation on the line
 above the fence:
